@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+  <PropertyGroup>
+    <AssemblyName>dpp4cli</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <!--
+      WinExe (non Exe) per garantire un thread STA con message pump,
+      esattamente come Dpp4Batch.exe. DppMWare.dll richiede COM STA.
+    -->
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net471</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Riferimenti alle DLL Canon installate con DPP4.
+    Percorso default: C:\Program Files\Canon\Digital Photo Professional 4\
+    Se DPP4 è installato altrove, aggiornare i percorsi HintPath.
+  -->
+  <ItemGroup>
+    <Reference Include="DapServiceFramework">
+      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapServiceFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="DapCommon">
+      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapCommon.dll</HintPath>
+    </Reference>
+    <Reference Include="DapStrings">
+      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapStrings.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="app.manifest" />
+  </ItemGroup>
+
+</Project>
