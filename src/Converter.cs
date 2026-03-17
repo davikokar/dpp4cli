@@ -1,24 +1,23 @@
 // Converter.cs
 //
-// Conversion pipeline (from DAPEventSaveConvert + DAPProcessUtility):
+// Multi-file conversion pipeline:
 //
-//  1. DPPMWare.DppMWInitialize()          initialize the native Canon engine
-//  2. DSFRecipe.Create()                  create and empty recipe handle
-//     recipe.ReadFileData(recipePath)     deserialize the .dr4 file
-//  3. DSFBatchScript.Create()             create the batch script in memory
-//                                         (internally: SetSystemRecipeToHandle)
-//  4. script.AddFile(src, dst,            add the pair RAW → JPEG to the script
-//                    DppImageType.Jpeg,   with the explicit recipe
-//                    recipe)
-//  5. script.SetJpegQuality(quality)      set the JPEG quality
-//     script.SetExifInfoLevel(All)        keep all EXIF metadata
-//  6. script.SaveScriptFile(tempPath)     serialize the script to a temp file
-//  7. DSFBatchProcess.Create(tempPath)    create the script batch process
-//  8. process.Execute(false)              execute the async conversion
-//  9. ManualResetEvent.WaitOne()          wait for the complete callback
-// 10. DPPMWare.DppMWTerminate()           terminate the engine
+//  1. DPPMWare.DppMWInitialize()
+//  2. DSFRecipe.Create() + recipe.ReadFileData(.dr4)
+//  3. DSFBatchScript.Create()
+//  4. For each RAW file: script.AddFile(src, dst, DppImageType.Jpeg, recipe)
+//  5. script.SetJpegQuality() + script.SetExifInfoLevel(All)
+//  6. script.SaveScriptFile(tempPath)
+//  7. DSFBatchProcess.Create(tempPath)
+//  8. process.Execute()           <- all files are processed in a single Execute()
+//  9. Wait for NotifyBatchCompleted
+// 10. DPPMWare.DppMWTerminate()
+//
+// All files share one DSFBatchScript, so DppMWare processes them in a single
+// engine run — more efficient than calling Execute() once per file.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using Canon.Dpp.Common.Utility;
@@ -33,22 +32,25 @@ namespace DPP4Cli
     {
         private readonly CliOptions _opts;
 
-        // Timeout for the conversion: 10 minutes (big files or slow machines)
-        private static readonly TimeSpan ConversionTimeout = TimeSpan.FromMinutes(10);
+        // Timeout scales with the number of files: 5 minutes base + 2 minutes per file
+        private TimeSpan ConversionTimeout =>
+            TimeSpan.FromMinutes(5 + 2 * _opts.RawFiles.Length);
 
         public Converter(CliOptions opts)
         {
             _opts = opts;
         }
 
-        public void Convert(string rawFile, string recipeFile, string outputFile)
+        /// <summary>
+        /// Converts all RAW files in opts.RawFiles to JPEG in opts.OutputDir.
+        /// Returns the number of files that failed (0 = full success).
+        /// </summary>
+        public int Convert(string recipeFile)
         {
             // Create output folder if it does not exist
-            string outDir = Path.GetDirectoryName(Path.GetFullPath(outputFile));
-            if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir))
-                Directory.CreateDirectory(outDir);
+            if (!Directory.Exists(_opts.OutputDir))
+                Directory.CreateDirectory(_opts.OutputDir);
 
-            // Every variable is released in finally
             DSF dsf = null;
             DSFRecipe recipe = null;
             DSFBatchScript batchScript = null;
@@ -60,171 +62,171 @@ namespace DPP4Cli
                 // ----------------------------------------------------------
                 // 1. Initialize the Canon engine
                 // ----------------------------------------------------------
-                Log("Initialize Canon DPP4 engine...");
+                Log("Initializing Canon DPP4 engine...");
                 dsf = new DSF();
                 uint r = dsf.Initialize();
                 if (DPPMWare.IsError(r))
                     throw new ConversionException(
-                        $"DppMWInitialize failed (codice 0x{r:X8}). " +
+                        $"DppMWInitialize failed (code 0x{r:X8}). " +
                         "Please verify that DPP4 is correctly installed.");
 
                 // ----------------------------------------------------------
-                // 2. Load recipe from .dr4 file 
+                // 2. Load recipe from .dr4 file
                 // ----------------------------------------------------------
                 Log("Loading recipe: " + recipeFile);
                 r = DSFRecipe.Create(out recipe);
                 if (DPPMWare.IsError(r))
-                    throw new ConversionException($"Creation of recipe handle failed (0x{r:X8}).");
+                    throw new ConversionException($"Recipe handle creation failed (0x{r:X8}).");
 
                 r = recipe.ReadFileData(recipeFile);
                 if (DPPMWare.IsError(r))
                     throw new ConversionException(
-                        $"Reading of the recipe '{recipeFile}' failed (0x{r:X8}). " +
-                        "Please verify that the recipe file is a valid recipe DPP4 file (.dr4).");
+                        $"Reading recipe '{recipeFile}' failed (0x{r:X8}). " +
+                        "Please verify that the file is a valid DPP4 recipe (.dr4).");
 
                 // ----------------------------------------------------------
-                // 3. Create batch script 
+                // 3. Create batch script
                 // ----------------------------------------------------------
-                Log("Creation of batch script...");
+                Log("Creating batch script...");
                 r = DSFBatchScript.Create(out batchScript);
                 if (DPPMWare.IsError(r))
-                    throw new ConversionException($"Creation of batch script failed (0x{r:X8}).");
+                    throw new ConversionException($"Batch script creation failed (0x{r:X8}).");
 
                 // ----------------------------------------------------------
-                // 4. Add file to conversion queue
+                // 4. Add all RAW files to the script
                 // ----------------------------------------------------------
-                //    The recipe added here overwrite the "system recipe"
-                //    for this specific file.
-                Log($"Adding file: {Path.GetFileName(rawFile)} → {Path.GetFileName(outputFile)}");
-                r = batchScript.AddFile(rawFile, outputFile, DPPMWare.DppImageType.Jpeg, recipe);
-                if (DPPMWare.IsError(r))
-                    throw new ConversionException(
-                        $"AddFile failed (0x{r:X8}). " +
-                        "Please verifica that the RAW file is supported by the installed version of DPP4.");
+                foreach (string rawFile in _opts.RawFiles)
+                {
+                    string outputFile = _opts.BuildOutputPath(rawFile);
+                    Log($"  Adding: {Path.GetFileName(rawFile)} -> {Path.GetFileName(outputFile)}");
+
+                    r = batchScript.AddFile(rawFile, outputFile, DPPMWare.DppImageType.Jpeg, recipe);
+                    if (DPPMWare.IsError(r))
+                        throw new ConversionException(
+                            $"AddFile failed for '{Path.GetFileName(rawFile)}' (0x{r:X8}). " +
+                            "Verify that the file is a RAW format supported by the installed DPP4 version.");
+                }
 
                 // ----------------------------------------------------------
-                // 5. Set JPEG quality parameter
+                // 5. Set JPEG parameters
                 // ----------------------------------------------------------
                 r = batchScript.SetJpegQuality((uint)_opts.JpegQuality);
                 if (DPPMWare.IsError(r))
-                    Log($"SetJpegQuality failed (0x{r:X8}), " +
+                    Log($"Warning: SetJpegQuality failed (0x{r:X8}), " +
                         "the quality defined in the recipe will be used.");
 
                 r = batchScript.SetExifInfoLevel(DPPMWare.DppSaveExifInfoLevel.All);
                 if (DPPMWare.IsError(r))
-                    Log($"SetExifInfoLevel failed (0x{r:X8}).");
+                    Log($"Warning: SetExifInfoLevel failed (0x{r:X8}).");
 
                 // ----------------------------------------------------------
-                // 6. Save the script to temporary file
+                // 6. Save script to temporary file
                 // ----------------------------------------------------------
                 tempScriptPath = Path.Combine(
                     DSFUtility.GetDPP4BatchTempFolderPath(),
                     Guid.NewGuid().ToString());
 
-                Log("Saving temporary script: " + tempScriptPath);
+                Log("Saving batch script to: " + tempScriptPath);
                 r = batchScript.SaveScriptFile(tempScriptPath);
                 if (DPPMWare.IsError(r))
                     throw new ConversionException($"SaveScriptFile failed (0x{r:X8}).");
 
-                // A this point the script is on disk, we can release the object
                 batchScript.Dispose();
                 batchScript = null;
 
                 // ----------------------------------------------------------
-                // 7. Create the script batch process
+                // 7. Create batch process
                 // ----------------------------------------------------------
-                Log("Creatione of bacth process...");
+                Log("Creating batch process...");
                 r = DSFBatchProcess.Create(tempScriptPath, out batchProcess);
                 if (DPPMWare.IsError(r))
-                    throw new ConversionException($"Creation of batch process failed (0x{r:X8}).");
+                    throw new ConversionException($"Batch process creation failed (0x{r:X8}).");
 
                 // ----------------------------------------------------------
-                // 8. Execute the conversion and wait for completion
+                // 8 & 9. Execute and wait — collect per-file results
                 // ----------------------------------------------------------
-                Log("Start conversion...");
-                var done = new ManualResetEventSlim(false);
-                Exception convException = null;
-                uint finalError = 0;
+                Log($"Starting conversion of {_opts.RawFiles.Length} file(s)...");
 
-                // Callback: current progress 
+                var done          = new ManualResetEventSlim(false);
+                int successCount  = 0;
+                int failureCount  = 0;
+                var failedFiles   = new List<string>();
+
                 batchProcess.NotifyBatchCurrentProgress +=
                     (src, dst, err, cur, tot, pct) =>
                     {
-                        if (_opts.Verbose)
-                            Program.Log($"  Progress {cur + 1}/{tot} — {pct}%" +
-                                        (DPPMWare.IsError(err) ? $" (error 0x{err:X8})" : ""));
-                        finalError = err;
+                        if (pct == 100)
+                        {
+                            // A file just finished
+                            bool ok = !DPPMWare.IsError(err) && err != 5u; // 5 = cancelled
+                            if (ok)
+                            {
+                                successCount++;
+                                Program.Log($"[{cur + 1}/{tot}] OK: {Path.GetFileName(dst)}");
+                            }
+                            else
+                            {
+                                failureCount++;
+                                string desc = DescribeError(err);
+                                failedFiles.Add(Path.GetFileName(src));
+                                Program.Log($"[{cur + 1}/{tot}] FAILED: {Path.GetFileName(src)} " +
+                                            $"(0x{err:X8} - {desc})");
+                            }
+                        }
+                        else if (_opts.Verbose)
+                        {
+                            Program.Log($"  [{cur + 1}/{tot}] {Path.GetFileName(src)} {pct}%");
+                        }
                     };
 
-                // Callback: completion (can be on any thread)
-                batchProcess.NotifyBatchCompleted += () =>
-                {
-                    done.Set();
-                };
+                batchProcess.NotifyBatchCompleted += () => done.Set();
 
                 r = batchProcess.Execute(setSystemRecipe: false);
                 if (DPPMWare.IsError(r))
-                    throw new ConversionException($"Execute batch failed (0x{r:X8}).");
+                    throw new ConversionException($"Batch execute failed (0x{r:X8}).");
 
-                // Wait for the completition with timeout
                 if (!done.Wait(ConversionTimeout))
                     throw new ConversionException(
-                        $"Timeout: conversion non completed within {ConversionTimeout.TotalMinutes} minutes.");
+                        $"Timeout: conversion did not complete within " +
+                        $"{ConversionTimeout.TotalMinutes:0} minutes.");
 
                 // ----------------------------------------------------------
-                // 9. Verify output
+                // Summary
                 // ----------------------------------------------------------
-                if (!batchProcess.Succeeded)
-                {
-                    // The error in progress callback is the most precise error code we can get
-                    uint errCode = finalError != 0 ? finalError : batchProcess.Error;
-                    throw new ConversionException(
-                        $"Conversion failed (code DPP4: 0x{errCode:X8}).\n" +
-                        DescribeError(errCode));
-                }
+                Program.Log($"Done: {successCount} succeeded, {failureCount} failed " +
+                            $"(out of {_opts.RawFiles.Length}).");
 
-                if (!File.Exists(outputFile))
-                    throw new ConversionException(
-                        "Conversione was successfull but the ouptfile " +
-                        "does not exist: " + outputFile);
+                if (failedFiles.Count > 0)
+                    Program.Log("Failed files: " + string.Join(", ", failedFiles));
 
-                Log($"Generated file: {new FileInfo(outputFile).Length / 1024} KB");
+                return failureCount;
             }
             finally
             {
-                // Clean up in reverse order
                 if (batchProcess != null) { try { batchProcess.Dispose(); } catch { } }
                 if (batchScript  != null) { try { batchScript.Dispose();  } catch { } }
                 if (recipe       != null) { try { recipe.Dispose();       } catch { } }
 
-                // Delete the temporary script file (DPP4 does it automatically
-                // within DSFBatchProcess.BatchCompletedAction, but we
-                // do it as well for safety in case of exceptions before Execute)
                 if (tempScriptPath != null && File.Exists(tempScriptPath))
-                {
                     try { File.Delete(tempScriptPath); } catch { }
-                }
 
                 if (dsf != null)
-                {
                     try { dsf.Terminate(); } catch { }
-                }
             }
         }
 
         private static string DescribeError(uint code)
         {
-            // Error codes in DAPSaveBatchProgressForm.MakeErroMessage
             switch (code)
             {
-                case  7u: return "File format not supported by this version of DPP4.";
-                case 34u: return "Source file not found or nor readable.";
-                case 41u: return "Denied permission on the output folder.";
-                case 42u: return "Insufficient disk space.";
-                case 43u: return "Destination path is not valid.";
-                case 64u: return "Insufficient memory.";
-                case  3u: return "Internal error in DPPç engine.";
-                default:  return "Verify that raw file and recipe file are compatible.";
+                case  7u: return "file format not supported by this DPP4 version";
+                case 34u: return "source file not found or not readable";
+                case 41u: return "permission denied on output folder";
+                case 42u: return "insufficient disk space";
+                case 43u: return "destination path is not valid";
+                case 64u: return "insufficient memory";
+                case  3u: return "internal DPP4 engine error";
+                default:  return "unknown error";
             }
         }
 

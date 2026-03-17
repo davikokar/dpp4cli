@@ -1,5 +1,5 @@
 // dpp4cli - Converts Canon RAW files to JPEG using a recipe (.dr4)
-// usaing the DppMWare.dll engine from Canon DPP4.
+// using the DppMWare.dll engine from Canon DPP4.
 
 using System;
 using System.IO;
@@ -41,7 +41,7 @@ namespace DPP4Cli
             }
             catch (CliUsageException ex)
             {
-                Console.Error.WriteLine("Errore: " + ex.Message);
+                Console.Error.WriteLine("Error: " + ex.Message);
                 Console.Error.WriteLine();
                 CliOptions.PrintUsage();
                 Environment.Exit(ExitError);
@@ -55,43 +55,47 @@ namespace DPP4Cli
                 return;
             }
 
-            // --- Reads the config file, then apply override from CLI
+            // --- Read the config file, then apply override from CLI ---
             LoadConfig();
             if (!string.IsNullOrEmpty(opts.Dpp4Dir))
                 Dpp4InstallDir = opts.Dpp4Dir;
 
-            // Adds the DPP4 folder to the process PATH before
-            // loading the Canon DLLs (DppMWare.dll and its native dependencies).
+            // Adds the DPP4 folder to the process PATH before loading the Canon
+            // DLLs (DppMWare.dll and its native dependencies).
             PrependDpp4DirToPath();
 
-            // --- Validations ---
-            if (!File.Exists(opts.RawFile))
-            {
-                Console.Error.WriteLine("Error: RAW file not found: " + opts.RawFile);
-                Environment.Exit(ExitError);
-                return;
-            }
+            // --- Validate inputs ---
             if (!File.Exists(opts.RecipeFile))
             {
                 Console.Error.WriteLine("Error: recipe file not found: " + opts.RecipeFile);
                 Environment.Exit(ExitError);
                 return;
             }
-            if (File.Exists(opts.OutputFile))
+
+            bool anyMissing = false;
+            foreach (string raw in opts.RawFiles)
             {
-                Console.Error.WriteLine("Error: output file already exists: " + opts.OutputFile);
-                Console.Error.WriteLine("Rename it or delete it before proceeding.");
+                if (!File.Exists(raw))
+                {
+                    Console.Error.WriteLine("Error: RAW file not found: " + raw);
+                    anyMissing = true;
+                }
+            }
+            if (anyMissing)
+            {
                 Environment.Exit(ExitError);
                 return;
             }
 
+            // --- Verbose summary ---
             if (opts.Verbose)
             {
-                Log("RAW    : " + opts.RawFile);
-                Log("Recipe : " + opts.RecipeFile);
-                Log("Output : " + opts.OutputFile);
-                Log("Quality: " + opts.JpegQuality);
-                Log("DPP4   : " + Dpp4InstallDir);
+                Log($"Files   : {opts.RawFiles.Length}");
+                Log("Recipe  : " + opts.RecipeFile);
+                Log("Out dir : " + opts.OutputDir);
+                Log("Suffix  : " + (opts.Suffix.Length > 0 ? opts.Suffix : "(none)"));
+                Log("Quality : " + opts.JpegQuality);
+                Log("DPP4    : " + Dpp4InstallDir);
             }
 
             // --- Start conversion on background thread ---
@@ -101,9 +105,8 @@ namespace DPP4Cli
             {
                 try
                 {
-                    converter.Convert(opts.RawFile, opts.RecipeFile, opts.OutputFile);
-                    Console.WriteLine("OK: " + opts.OutputFile);
-                    _exitCode = ExitOk;
+                    int failures = converter.Convert(opts.RecipeFile);
+                    _exitCode = failures == 0 ? ExitOk : ExitError;
                 }
                 catch (ConversionException ex)
                 {
@@ -112,7 +115,7 @@ namespace DPP4Cli
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine("Unexpected errrore: " + ex.Message);
+                    Console.Error.WriteLine("Unexpected error: " + ex.Message);
                     if (opts.Verbose)
                         Console.Error.WriteLine(ex.ToString());
                     _exitCode = ExitError;
@@ -145,10 +148,10 @@ namespace DPP4Cli
 
         /// <summary>
         /// Reads dpp4cli.config from the same folder as the executable.
-        /// Format: one raw per configuration, "key=value".
-        /// Empty rows and rows starting with # are ignored.
+        /// Format: one entry per line, "key=value".
+        /// Empty lines and lines starting with # are ignored.
         ///
-        /// Example of dpp4cli.config:
+        /// Example dpp4cli.config:
         ///   # Path to Canon DPP4 installation
         ///   dpp4dir=C:\Program Files\Canon\Digital Photo Professional 4
         /// </summary>
@@ -179,13 +182,13 @@ namespace DPP4Cli
                         if (!string.IsNullOrEmpty(value))
                             Dpp4InstallDir = value;
                         break;
-                        // space for future configuration keys
+                    // Space for future configuration keys
                 }
             }
         }
 
         // ------------------------------------------------------------------
-        //  process PATH
+        //  Process PATH
         // ------------------------------------------------------------------
 
         private static void PrependDpp4DirToPath()
@@ -193,7 +196,7 @@ namespace DPP4Cli
             if (!Directory.Exists(Dpp4InstallDir))
             {
                 Console.Error.WriteLine(
-                    "Folder DPP4 not found: " + Dpp4InstallDir);
+                    "DPP4 folder not found: " + Dpp4InstallDir);
                 Console.Error.WriteLine(
                     "Set 'dpp4dir' in dpp4cli.config or use --dpp4dir.");
                 return;

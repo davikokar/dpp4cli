@@ -4,8 +4,8 @@
     <AssemblyName>dpp4cli</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
     <!--
-      WinExe (non Exe) per garantire un thread STA con message pump,
-      esattamente come Dpp4Batch.exe. DppMWare.dll richiede COM STA.
+      WinExe (not Exe) to guarantee an STA thread with message pump,
+      exactly like Dpp4Batch.exe. DppMWare.dll requires COM STA.
     -->
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>True</UseWindowsForms>
@@ -33,19 +33,25 @@
   </PropertyGroup>
 
   <!--
-    Riferimenti alle DLL Canon installate con DPP4.
-    Percorso default: C:\Program Files\Canon\Digital Photo Professional 4\
-    Se DPP4 è installato altrove, aggiornare i percorsi HintPath.
+    References to the Canon managed DLLs stored locally in lib/.
+    These are the .NET assemblies; they do NOT contain native code.
+    The native engine (DppMWare.dll and its dependencies) is loaded
+    at runtime from the DPP4 installation folder via the PATH trick
+    in Program.PrependDpp4DirToPath() — no recompile needed if DPP4
+    is reinstalled to a different location, just update dpp4cli.config.
   -->
   <ItemGroup>
     <Reference Include="DapServiceFramework">
-      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapServiceFramework.dll</HintPath>
+      <HintPath>lib\DapServiceFramework.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="DapCommon">
-      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapCommon.dll</HintPath>
+      <HintPath>lib\DapCommon.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="DapStrings">
-      <HintPath>$(ProgramFiles)\Canon\Digital Photo Professional 4\DapStrings.dll</HintPath>
+      <HintPath>lib\DapStrings.dll</HintPath>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
 
@@ -57,6 +63,10 @@
 
   <ItemGroup>
     <None Include="app.manifest" />
+    <!-- Copy the config file next to the exe on every build -->
+    <None Include="dpp4cli.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

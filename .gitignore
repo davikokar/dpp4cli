@@ -1,3 +1,5 @@
 .vs/
 src/bin/
 src/obj/
+# Canon DPP4 managed DLLs - not redistributable - copy them manually to lib folder from dpp4 installation directory
+src/lib/*.dll
