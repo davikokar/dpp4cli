@@ -69,4 +69,8 @@
     </None>
   </ItemGroup>
 
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="if &quot;$(ConfigurationName)&quot;==&quot;Release&quot; copy /Y &quot;$(ProjectDir)readme.md&quot; &quot;$(TargetDir)readme.md&quot;" />
+  </Target>
+
 </Project>

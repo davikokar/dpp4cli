@@ -1,0 +1,35 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: dpp4cli ${{ github.ref_name }}
+          body: |
+            ## Installation
+
+            1. Ensure Canon DPP4 is installed on your machine.
+            2. Download `dpp4cli.exe` and `dpp4cli.config`.
+            3. Place both files in the same folder.
+            4. Edit `dpp4cli.config` to set the DPP4 installation path if different from the default.
+
+            ## Requirements
+            - Windows 10 x64
+            - Canon Digital Photo Professional 4
+            - .NET Framework 4.7.1
+
+          files: |
+            src/bin/Release/net471/dpp4cli.exe
+            src/bin/Release/net471/dpp4cli.config
