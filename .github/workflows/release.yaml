@@ -24,6 +24,7 @@ jobs:
             2. Download `dpp4cli.exe` and `dpp4cli.config`.
             3. Place both files in the same folder.
             4. Edit `dpp4cli.config` to set the DPP4 installation path if different from the default.
+            5. Copy the three dlls (DapCommon.dll, DapServiceFramework.dll, DapStrings.dll) from Canon DPP4 to the folder with `dpp4cli.exe`
 
             ## Requirements
             - Windows 10 x64
