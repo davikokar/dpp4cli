@@ -21,8 +21,8 @@ jobs:
             ## Installation
 
             1. Ensure Canon DPP4 is installed on your machine.
-            2. Download `dpp4cli.exe` and `dpp4cli.config`.
-            3. Place both files in the same folder.
+            2. Download `dpp4cli.exe`, `dpp4cli.config` and `dpp4_recipe_default.dr4`.
+            3. Place files in the same folder.
             4. Edit `dpp4cli.config` to set the DPP4 installation path if different from the default.
             5. Copy the three dlls (DapCommon.dll, DapServiceFramework.dll, DapStrings.dll) from Canon DPP4 to the folder with `dpp4cli.exe`
 
@@ -34,3 +34,4 @@ jobs:
           files: |
             src/bin/Release/net471/dpp4cli.exe
             src/bin/Release/net471/dpp4cli.config
+            src/bin/Release/net471/dpp4_recipe_default.dr4

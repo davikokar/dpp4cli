@@ -145,7 +145,7 @@ namespace DPP4Cli
                 // ----------------------------------------------------------
                 // 8 & 9. Execute and wait — collect per-file results
                 // ----------------------------------------------------------
-                Log($"Starting conversion of {_opts.RawFiles.Length} file(s)...");
+                Program.Log($"Starting conversion of {_opts.RawFiles.Length} file(s)...");
 
                 var done          = new ManualResetEventSlim(false);
                 int successCount  = 0;

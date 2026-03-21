@@ -85,7 +85,17 @@ namespace DPP4Cli
             if (!o.ShowHelp)
             {
                 if (rawFiles.Count == 0) throw new CliUsageException("At least one RAW file is required.");
-                if (o.RecipeFile == null) throw new CliUsageException("Recipe file missing (--recipe).");
+                if (o.RecipeFile == null)
+                {
+                    var defaultRecipe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dpp4_recipe_default.dr4");
+                    if (File.Exists(defaultRecipe))
+                    {
+                        o.RecipeFile = defaultRecipe;
+                        Console.WriteLine($"[dpp4cli] No recipe specified, using default: {defaultRecipe}");
+                    }
+                    else
+                        throw new CliUsageException("Recipe file missing (--recipe).");
+                }
                 if (o.OutputDir  == null) throw new CliUsageException("Output folder missing (--outdir).");
 
                 // Resolve to absolute paths
