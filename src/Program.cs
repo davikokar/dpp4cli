@@ -20,6 +20,18 @@ namespace DPP4Cli
         private static extern bool AttachConsole(int dwProcessId);
         private const int AttachParentProcess = -1;
 
+        [DllImport("kernel32.dll")]
+        private static extern bool FreeConsole();
+
+        private static void ReleaseConsole()
+        {
+            Console.Out.Flush();
+            Console.Error.Flush();
+            FreeConsole();
+            // Inject a return in the buffer of the shell to resume the prompt
+            System.Windows.Forms.SendKeys.SendWait("{ENTER}");
+        }
+
         // Path to the DPP4 installation folder.
         // Loaded from config file; can be overridden via --dpp4dir.
         internal static string Dpp4InstallDir =
@@ -44,6 +56,7 @@ namespace DPP4Cli
                 Console.Error.WriteLine("Error: " + ex.Message);
                 Console.Error.WriteLine();
                 CliOptions.PrintUsage();
+                ReleaseConsole();
                 Environment.Exit(ExitError);
                 return;
             }
@@ -51,6 +64,7 @@ namespace DPP4Cli
             if (opts.ShowHelp)
             {
                 CliOptions.PrintUsage();
+                ReleaseConsole();
                 Environment.Exit(ExitOk);
                 return;
             }
@@ -68,6 +82,7 @@ namespace DPP4Cli
             if (!File.Exists(opts.RecipeFile))
             {
                 Console.Error.WriteLine("Error: recipe file not found: " + opts.RecipeFile);
+                ReleaseConsole();
                 Environment.Exit(ExitError);
                 return;
             }
@@ -83,6 +98,7 @@ namespace DPP4Cli
             }
             if (anyMissing)
             {
+                ReleaseConsole();
                 Environment.Exit(ExitError);
                 return;
             }
@@ -133,7 +149,7 @@ namespace DPP4Cli
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run();
-
+            ReleaseConsole();
             Environment.Exit(_exitCode);
         }
 
