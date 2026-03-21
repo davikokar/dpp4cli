@@ -7,7 +7,7 @@
       WinExe (not Exe) to guarantee an STA thread with message pump,
       exactly like Dpp4Batch.exe. DppMWare.dll requires COM STA.
     -->
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <UseWindowsForms>True</UseWindowsForms>
     <TargetFramework>net471</TargetFramework>
     <LangVersion>9.0</LangVersion>
@@ -68,9 +68,5 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="if &quot;$(ConfigurationName)&quot;==&quot;Release&quot; copy /Y &quot;$(ProjectDir)readme.md&quot; &quot;$(TargetDir)readme.md&quot;" />
-  </Target>
 
 </Project>

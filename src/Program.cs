@@ -114,43 +114,46 @@ namespace DPP4Cli
                 Log("DPP4    : " + Dpp4InstallDir);
             }
 
+            var staReady = new ManualResetEventSlim(false);
+            var staThread = new Thread(() =>
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                staReady.Set();
+                Application.Run();
+            });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Name = "DPP4-STA-Pump";
+            staThread.IsBackground = true;
+            staThread.Start();
+            staReady.Wait();
+
             // --- Start conversion on background thread ---
             var converter = new Converter(opts);
 
-            var bgThread = new Thread(() =>
+            try
             {
-                try
-                {
-                    int failures = converter.Convert(opts.RecipeFile);
-                    _exitCode = failures == 0 ? ExitOk : ExitError;
-                }
-                catch (ConversionException ex)
-                {
-                    Console.Error.WriteLine("Error: " + ex.Message);
-                    _exitCode = ExitError;
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine("Unexpected error: " + ex.Message);
-                    if (opts.Verbose)
-                        Console.Error.WriteLine(ex.ToString());
-                    _exitCode = ExitError;
-                }
-                finally
-                {
-                    Application.Exit();
-                }
-            });
-
-            bgThread.Name = "DPP4-Converter";
-            bgThread.SetApartmentState(ApartmentState.MTA);
-            bgThread.Start();
-
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run();
-            ReleaseConsole();
-            Environment.Exit(_exitCode);
+                int failures = converter.Convert(opts.RecipeFile);
+                _exitCode = failures == 0 ? ExitOk : ExitError;
+            }
+            catch (ConversionException ex)
+            {
+                Console.Error.WriteLine("Error: " + ex.Message);
+                _exitCode = ExitError;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Unexpected error: " + ex.Message);
+                if (opts.Verbose)
+                    Console.Error.WriteLine(ex.ToString());
+                _exitCode = ExitError;
+            }
+            finally
+            {
+                Application.Exit();
+                ReleaseConsole();
+                Environment.Exit(_exitCode);
+            }
         }
 
         internal static void Log(string msg)
