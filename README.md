@@ -1,6 +1,6 @@
 # dpp4cli
 
-A CLI utility that converts one or more Canon RAW files to JPEG by applying a
+A CLI utility that converts one or more Canon RAW files to JPEG|TIFF by applying a
 DPP4 recipe (.dr4), using the Canon DPP4 engine installed on the machine —
 without opening the graphical interface.
 
@@ -98,6 +98,7 @@ dpp4cli --recipe <file.dr4> --outdir <folder> [options] file1.CR3 file2.CR3 ...
 | `--quality / -q <1-100>` | JPEG quality (default: 100) |
 | `--dpp4dir <folder>` | Override the DPP4 path from the config file |
 | `--verbose / -v` | Detailed diagnostic logging |
+| `--format / -f` | Output format (default: jpg) accepted values: jpg, tiff8, tiff16, tiff8+jpg, tiff16+jpg |
 | `--help / -h` | Show help |
 
 ### Examples

@@ -4,6 +4,14 @@ using System.IO;
 
 namespace DPP4Cli
 {
+    internal enum OutputFormat
+    {
+        Jpeg,
+        Tiff8,
+        Tiff16,
+        Tiff8AndJpeg,
+        Tiff16AndJpeg
+    }
     internal sealed class CliOptions
     {
         // --- Required ---
@@ -23,6 +31,9 @@ namespace DPP4Cli
 
         // --- DPP4 path (overrides config file) ---
         public string Dpp4Dir { get; private set; }
+
+        // --- Output Format (JPG, TIFF or combination) ---
+        public OutputFormat Format { get; private set; } = OutputFormat.Jpeg;
 
         // --- Diagnostics ---
         public bool Verbose  { get; private set; }
@@ -58,6 +69,26 @@ namespace DPP4Cli
                     case "-s": case "--suffix":
                         o.Suffix = Next(args, ref i, "--suffix");
                         break;
+
+                    case "-f": case "--format":
+                        {
+                            string v = Next(args, ref i, "--format").ToLowerInvariant();
+                            switch (v)
+                            {
+                                case "jpg": o.Format = OutputFormat.Jpeg; break;
+                                case "tiff8": o.Format = OutputFormat.Tiff8; break;
+                                case "tiff16": o.Format = OutputFormat.Tiff16; break;
+                                case "tiff8+jpg": o.Format = OutputFormat.Tiff8AndJpeg; break;
+                                case "jpg+tiff8": o.Format = OutputFormat.Tiff8AndJpeg; break;
+                                case "tiff16+jpg": o.Format = OutputFormat.Tiff16AndJpeg; break;
+                                case "jpg+tiff16": o.Format = OutputFormat.Tiff16AndJpeg; break;
+                                default:
+                                    throw new CliUsageException(
+                                        $"Unknown format '{v}'. " +
+                                        "Valid values: jpg, tiff8, tiff16, tiff8+jpg, tiff16+jpg");
+                            }
+                            break;
+                        }
 
                     case "-q": case "--quality":
                     {
@@ -112,13 +143,34 @@ namespace DPP4Cli
         }
 
         /// <summary>
-        /// Builds the output JPEG path for a given RAW file.
-        /// e.g. IMG_001.CR3  ->  <OutputDir>\IMG_001<Suffix>.jpg
+        /// Returns one or two output paths for a given RAW file, depending on the format.
+        /// Dual formats (tiff8+jpg, tiff16+jpg) return two paths.
+        /// Item1 = primary type path, Item2 = secondary type path (or null).
         /// </summary>
-        public string BuildOutputPath(string rawFile)
+        public (string primary, string secondary) BuildOutputPaths(string rawFile)
         {
-            string baseName = Path.GetFileNameWithoutExtension(rawFile);
-            return Path.Combine(OutputDir, baseName + Suffix + ".jpg");
+            string baseName = Path.GetFileNameWithoutExtension(rawFile) + Suffix;
+            string inDir = OutputDir;
+
+            switch (Format)
+            {
+                case OutputFormat.Jpeg:
+                    return (Path.Combine(inDir, baseName + ".jpg"), null);
+
+                case OutputFormat.Tiff8:
+                case OutputFormat.Tiff16:
+                    return (Path.Combine(inDir, baseName + ".tif"), null);
+
+                case OutputFormat.Tiff8AndJpeg:
+                case OutputFormat.Tiff16AndJpeg:
+                    return (
+                        Path.Combine(inDir, baseName + ".tif"),
+                        Path.Combine(inDir, baseName + ".jpg")
+                    );
+
+                default:
+                    throw new InvalidOperationException("Unknown format: " + Format);
+            }
         }
 
         private static string Next(string[] args, ref int i, string flag)
@@ -142,6 +194,12 @@ REQUIRED:
   <file1.CR3> ...            One or more Canon RAW files (.CR2, .CR3, .CRW, .CRF, ...)
 
 OPTIONS:
+  --format / -f <fmt>        Output format (default: jpg)
+                               jpg         JPEG
+                               tiff8       TIFF 8-bit
+                               tiff16      TIFF 16-bit
+                               tiff8+jpg   TIFF 8-bit + JPEG (two files per RAW)
+                               tiff16+jpg  TIFF 16-bit + JPEG (two files per RAW)
   --suffix / -s <text>       Suffix inserted between the base name and .jpg
                              e.g. --suffix _edit  ->  IMG_001.CR3 becomes IMG_001_edit.jpg
   --quality / -q <1-100>     JPEG quality (default: 100)
