@@ -2,6 +2,7 @@
 // using the DppMWare.dll engine from Canon DPP4.
 
 using System;
+using System.Configuration;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -176,34 +177,9 @@ namespace DPP4Cli
         /// </summary>
         private static void LoadConfig()
         {
-            string exeDir  = Path.GetDirectoryName(
-                System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
-            string cfgPath = Path.Combine(exeDir, "dpp4cli.config");
-
-            if (!File.Exists(cfgPath))
-                return;
-
-            foreach (string rawLine in File.ReadAllLines(cfgPath, System.Text.Encoding.UTF8))
-            {
-                string line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith("#"))
-                    continue;
-
-                int eq = line.IndexOf('=');
-                if (eq < 1) continue;
-
-                string key   = line.Substring(0, eq).Trim().ToLowerInvariant();
-                string value = line.Substring(eq + 1).Trim();
-
-                switch (key)
-                {
-                    case "dpp4dir":
-                        if (!string.IsNullOrEmpty(value))
-                            Dpp4InstallDir = value;
-                        break;
-                    // Space for future configuration keys
-                }
-            }
+            string dpp4dir = ConfigurationManager.AppSettings["dpp4dir"];
+            if (!string.IsNullOrWhiteSpace(dpp4dir))
+                Dpp4InstallDir = dpp4dir;
         }
 
         // ------------------------------------------------------------------

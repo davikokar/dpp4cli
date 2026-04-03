@@ -57,6 +57,9 @@
 
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration">
+      <HintPath>..\..\..\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.1\System.Configuration.dll</HintPath>
+    </Reference>
     <Reference Include="System.Core" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
@@ -64,9 +67,6 @@
   <ItemGroup>
     <None Include="app.manifest" />
     <!-- Copy the config file next to the exe on every build -->
-    <None Include="dpp4cli.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="dpp4_recipe_default.dr4">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
