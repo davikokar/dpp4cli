@@ -1,9 +1,30 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace DPP4Cli
 {
+
+    /// <summary>
+    /// RAW file extensions recognised by DPP4.
+    /// JPEG and TIFF are intentionally excluded: they are valid DPP4 inputs
+    /// but are not typical candidates for RAW development.
+    /// </summary>
+    internal static class RawExtensions
+    {
+        public static readonly HashSet<string> All = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ".CR3",
+            ".CR2",
+            ".TIF",
+            ".CRW",
+            ".CIP",
+            ".CRN",
+        };
+    }
+
     internal enum OutputFormat
     {
         Jpeg,
@@ -45,6 +66,8 @@ namespace DPP4Cli
         {
             var o = new CliOptions();
             var rawFiles = new List<string>();
+            string inputDir = null;
+            bool recursive = false;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -62,8 +85,16 @@ namespace DPP4Cli
                         o.RecipeFile = Next(args, ref i, "--recipe");
                         break;
 
-                    case "-d": case "--outdir":
-                        o.OutputDir = Next(args, ref i, "--outdir");
+                    case "-o": case "--outputdir":
+                        o.OutputDir = Next(args, ref i, "--outputdir");
+                        break;
+
+                    case "-i": case "--inputdir":
+                        inputDir = Next(args, ref i, "--inputdir");
+                        break;
+
+                    case "--recursive":
+                        recursive = true;
                         break;
 
                     case "-s": case "--suffix":
@@ -115,7 +146,6 @@ namespace DPP4Cli
 
             if (!o.ShowHelp)
             {
-                if (rawFiles.Count == 0) throw new CliUsageException("At least one RAW file is required.");
                 if (o.RecipeFile == null)
                 {
                     var defaultRecipe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "dpp4_recipe_default.dr4");
@@ -129,9 +159,37 @@ namespace DPP4Cli
                 }
                 if (o.OutputDir  == null) throw new CliUsageException("Output folder missing (--outdir).");
 
-                // Resolve to absolute paths
-                for (int i = 0; i < rawFiles.Count; i++)
-                    rawFiles[i] = Path.GetFullPath(rawFiles[i]);
+                bool hasPositional = rawFiles.Count > 0;
+                bool hasInputFolder = inputDir != null;
+
+                if (!hasPositional && !hasInputFolder)
+                    throw new CliUsageException(
+                        "No input specified. Provide RAW files as arguments or use --inputDir.");
+
+                if (hasPositional && hasInputFolder)
+                    throw new CliUsageException(
+                        "--inputDir cannot be combined with positional RAW file arguments. " +
+                        "Use one or the other.");
+
+                if (hasInputFolder)
+                {
+                    inputDir = Path.GetFullPath(inputDir);
+                    if (!Directory.Exists(inputDir))
+                        throw new CliUsageException($"Input folder not found: {inputDir}");
+
+                    rawFiles = ScanFolder(inputDir, recursive);
+
+                    if (rawFiles.Count == 0)
+                        throw new CliUsageException(
+                            $"No RAW files found in '{inputDir}'" +
+                            (recursive ? " (including subfolders)." : ". Use --recursive to include subfolders."));
+                }
+                else
+                {
+                    // Resolve positional paths to absolute
+                    for (int i = 0; i < rawFiles.Count; i++)
+                        rawFiles[i] = Path.GetFullPath(rawFiles[i]);
+                }
 
                 o.RawFiles   = rawFiles.ToArray();
                 o.RecipeFile = Path.GetFullPath(o.RecipeFile);
@@ -140,6 +198,22 @@ namespace DPP4Cli
             }
 
             return o;
+        }
+
+        /// <summary>
+        /// Scans a folder for RAW files. Returns absolute paths sorted alphabetically.
+        /// </summary>
+        private static List<string> ScanFolder(string folder, bool recursive)
+        {
+            var option = recursive
+                ? SearchOption.AllDirectories
+                : SearchOption.TopDirectoryOnly;
+
+            return Directory
+                .EnumerateFiles(folder, "*.*", option)
+                .Where(f => RawExtensions.All.Contains(Path.GetExtension(f)))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         /// <summary>
@@ -186,14 +260,22 @@ namespace DPP4Cli
 dpp4cli - Converts Canon RAW files to JPEG applying a DPP4 recipe
 
 USAGE:
-  dpp4cli --recipe <file.dr4> --outdir <folder> [options] file1.CR3 file2.CR3 ...
+  dpp4cli --recipe <file.dr4> --outputdir <folder> [options] file1.CR3 file2.CR3 ...
+  dpp4cli --recipe <file.dr4> --outputdir <folder> --inputdir <folder> [options]
+
+INPUT (one of the two is required):
+  <file1.CR3> ...            One or more RAW files passed as arguments
+  --inputdir / -i <path>     Folder containing RAW files to process
+                             (cannot be combined with positional file arguments)
 
 REQUIRED:
-  --recipe / -p <path>       DPP4 recipe file (.dr4) with the development parameters
-  --outdir / -d <folder>     Output folder (created automatically if it does not exist)
+  --outputdir / -o <folder>  Output folder (created automatically if it does not exist)
   <file1.CR3> ...            One or more Canon RAW files (.CR2, .CR3, .CRW, .CRF, ...)
 
 OPTIONS:
+  --recipe / -p <path>       DPP4 recipe file (.dr4) with the development parameters
+                             If not specified, dpp4cli looks for dpp4_recipe_default.dr4 in the executable folder.
+                             If that is also missing, an error is raised.
   --format / -f <fmt>        Output format (default: jpg)
                                jpg         JPEG
                                tiff8       TIFF 8-bit
@@ -209,16 +291,16 @@ OPTIONS:
 
 EXAMPLES:
   :: Single file
-  dpp4cli --recipe portrait.dr4 --outdir C:\export IMG_001.CR3
+  dpp4cli --recipe portrait.dr4 --outputdir C:\export IMG_001.CR3
 
   :: Multiple files
-  dpp4cli --recipe portrait.dr4 --outdir C:\export IMG_001.CR3 IMG_002.CR3 IMG_003.CR3
+  dpp4cli --recipe portrait.dr4 --outputdir C:\export IMG_001.CR3 IMG_002.CR3 IMG_003.CR3
 
   :: With suffix and quality
-  dpp4cli --recipe params.dr4 --outdir C:\export --suffix _edit --quality 95 *.CR3
+  dpp4cli --recipe params.dr4 --outputdir C:\export --suffix _edit --quality 95 *.CR3
 
   :: PowerShell glob
-  dpp4cli --recipe params.dr4 --outdir C:\export (Get-Item C:\raw\*.CR3)
+  dpp4cli --recipe params.dr4 --outputdir C:\export (Get-Item C:\raw\*.CR3)
 
 CONFIG FILE:
   Place dpp4cli.config in the same folder as the executable:

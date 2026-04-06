@@ -86,14 +86,21 @@ dpp4cli --recipe <file.dr4> --outdir <folder> [options] file1.CR3 file2.CR3 ...
 
 | Argument | Description |
 |----------|-------------|
-| `--recipe / -p <path>` | DPP4 recipe file (.dr4) |
-| `--outdir / -d <folder>` | Output folder (created automatically if missing) |
+| `--outputdir / -o <folder>` | Output folder (created automatically if missing) |
+| `file1.CR3 ...` | One or more Canon RAW files (.CR2, .CR3, .CRW, .CRF, ...) |
+
+### Input (one of the two is required)
+
+| Argument | Description |
+|----------|-------------|
+| `--inputdir / -i <path>` | Folder containing RAW files to process |
 | `file1.CR3 ...` | One or more Canon RAW files (.CR2, .CR3, .CRW, .CRF, ...) |
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
+| `--recipe / -p <path>` | DPP4 recipe file (.dr4) |
 | `--suffix / -s <text>` | Suffix added before `.jpg`; e.g. `_edit` turns `IMG_001.CR3` into `IMG_001_edit.jpg` |
 | `--quality / -q <1-100>` | JPEG quality (default: 100) |
 | `--dpp4dir <folder>` | Override the DPP4 path from the config file |
